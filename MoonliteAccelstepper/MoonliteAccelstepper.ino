@@ -1,7 +1,6 @@
 // Moonlite-compatible stepper controller
 //
 // Uses AccelStepper (http://www.airspayce.com/mikem/arduino/AccelStepper/)
-// Uses AFMotor and the Adafruit v1.2 Motor Shield https://learn.adafruit.com/adafruit-motor-shield
 //
 // Requires a 10uf - 100uf capacitor between RESET and GND on the motor shield; this prevents the
 // Arduino from resetting on connect (via DTR going low).  Without the capacitor, this sketch works
@@ -73,8 +72,6 @@ void setup()
   stepper.setEnablePin(MY_SLP_PIN);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
-  
-  temperature = 30.1; /* FIXME: This is test code until DS18B20 is ready */
 }
 
 
