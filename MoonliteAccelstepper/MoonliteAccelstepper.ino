@@ -52,6 +52,7 @@ int speed = 32;
 int eoc = 0;
 int idx = 0;
 long millisLastMove = 0;
+int half_step = 0;
 
 void setup()
 {  
@@ -65,8 +66,8 @@ void setup()
 
   // we ignore the Moonlite speed setting because Accelstepper implements
   // ramping, making variable speeds un-necessary
-  stepper.setSpeed(STEPS_PER_REV / 4);
-  stepper.setMaxSpeed(STEPS_PER_REV / 4);
+  stepper.setSpeed(STEPS_PER_REV / 2);
+  stepper.setMaxSpeed(STEPS_PER_REV / 2);
   stepper.setAcceleration(20);
   stepper.enableOutputs();
   stepper.setEnablePin(MY_SLP_PIN);
@@ -90,7 +91,9 @@ void loop(){
       // over a short interval; hence we only disable the outputs and release the motor some seconds
       // after movement has stopped
       if ((millis() - millisLastMove) > 15000) {
-        stepper.disableOutputs();
+        if (!half_step) {
+          stepper.disableOutputs();
+        }
       }
     }
 
@@ -208,7 +211,11 @@ void loop(){
 
     /* Get half-stepping */
     if (!strcasecmp(cmd, "GH")) {
-      Serial.print("00#");
+      if (half_step) {
+        Serial.print("FF#");
+      } else {
+        Serial.print("00#");
+      }
     }
 
     // motor is moving - 01 if moving, 00 otherwise
@@ -231,6 +238,18 @@ void loop(){
     if (!strcasecmp(cmd, "SN")) {
       pos = hexstr2long(param);
       stepper.moveTo(pos);
+    }
+
+    /* Set half-step mode */
+    if (!strcasecmp(cmd, "SH")) {
+        half_step = 1;
+        digitalWrite(MY_MS1_PIN, HIGH);
+    }
+
+    /* Set full-step mode */
+    if (!strcasecmp(cmd, "SF")) {
+        half_step = 0;
+        digitalWrite(MY_MS1_PIN, LOW);
     }
 
     //Actually start the move
