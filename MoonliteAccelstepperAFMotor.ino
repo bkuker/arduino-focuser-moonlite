@@ -12,25 +12,34 @@
 
 
 #include <AccelStepper.h>
-#include <AFMotor.h>
 
 
 // maximum speed is 160pps which should be OK for most
 // tin can steppers
 #define MAXSPEED 100
-#define SPEEDMULT 3
 
-AF_Stepper motor1(300, 1);
+/* Microstepping mode of driver (microsteps/full step) */
+#define MICROSTEPS 1
+/* The gear ratio of the stepper */
+#define GEAR_RATIO 64
+/* How many steps per full revolution of the motor itself (not including gearing) */
+#define NATIVE_STEPS_PER_REV 48
+/* How many pulses of the STEP pin for one revolution of gear shaft */
+#define STEPS_PER_REV (NATIVE_STEPS_PER_REV * GEAR_RATIO * MICROSTEPS) 
 
-void forwardstep() {  
-  motor1.onestep(BACKWARD, DOUBLE);
-}
 
-void backwardstep() {  
-  motor1.onestep(FORWARD, DOUBLE);
-}
 
-AccelStepper stepper(forwardstep, backwardstep);
+
+#define MY_MS1_PIN 13
+#define MY_MS2_PIN 15
+#define MY_MS3_PIN 16
+#define MY_SLP_PIN 19
+#define MY_STEP_PIN 17
+#define MY_DIR_PIN 18
+
+#define TEMP_AVE_SEC 20
+
+AccelStepper stepper(1, MY_STEP_PIN, MY_DIR_PIN);
 
 #define MAXCOMMAND 8
 
@@ -47,21 +56,31 @@ long millisLastMove = 0;
 
 void setup()
 {  
+  pinMode(MY_MS1_PIN, OUTPUT);
+  digitalWrite(MY_MS1_PIN, LOW);
+  pinMode(MY_MS2_PIN, OUTPUT);
+  digitalWrite(MY_MS2_PIN, LOW);
+  pinMode(MY_MS3_PIN, OUTPUT);
+  digitalWrite(MY_MS3_PIN, LOW); 
   Serial.begin(9600);
 
   // we ignore the Moonlite speed setting because Accelstepper implements
   // ramping, making variable speeds un-necessary
-  stepper.setSpeed(MAXSPEED);
-  stepper.setMaxSpeed(MAXSPEED);
-  stepper.setAcceleration(10);
+  stepper.setSpeed(STEPS_PER_REV / 4);
+  stepper.setMaxSpeed(STEPS_PER_REV / 4);
+  stepper.setAcceleration(20);
   stepper.enableOutputs();
+  stepper.setEnablePin(MY_SLP_PIN);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
+  
+  temperature = 30.1; /* FIXME: This is test code until DS18B20 is ready */
 }
 
 
 
 void loop(){
+
   // run the stepper if there's no pending command and if there are pending movements
   if (!Serial.available())
   {
@@ -75,7 +94,6 @@ void loop(){
       // after movement has stopped
       if ((millis() - millisLastMove) > 15000) {
         stepper.disableOutputs();
-        motor1.release();
       }
     }
 
@@ -159,7 +177,8 @@ void loop(){
       Serial.print("#");
     }
 
-    // get the current temperature, hard-coded
+    // get the current temperature
+    // The temperature is sent in .5 *C units
     if (!strcasecmp(cmd, "GT")) {
       Serial.print("0020#");
     }
@@ -190,7 +209,7 @@ void loop(){
       stepper.setMaxSpeed(MAXSPEED);
     }
 
-    // whether half-step is enabled or not, always return "00"
+    /* Get half-stepping */
     if (!strcasecmp(cmd, "GH")) {
       Serial.print("00#");
     }
@@ -217,11 +236,11 @@ void loop(){
       stepper.moveTo(pos);
     }
 
-
-    // initiate a move
+    //Actually start the move
     if (!strcasecmp(cmd, "FG")) {
       isRunning = 1;
       stepper.enableOutputs();
+      delay(1);
     }
 
     // stop a move
@@ -230,6 +249,7 @@ void loop(){
       stepper.moveTo(stepper.currentPosition());
       stepper.run();
     }
+
   }
 } // end loop
 
@@ -239,7 +259,5 @@ long hexstr2long(char *line) {
   ret = strtol(line, NULL, 16);
   return (ret);
 }
-
-
 
 
