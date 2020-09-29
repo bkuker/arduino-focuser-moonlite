@@ -10,7 +10,7 @@
 // orly.andico@gmail.com, 13 April 2014
 
 
-#include <AccelStepper.h>
+#include "src/AccelStepper/AccelStepper.h"
 
 
 // maximum speed is 160pps which should be OK for most
@@ -26,19 +26,17 @@
 /* How many pulses of the STEP pin for one revolution of gear shaft */
 #define STEPS_PER_REV (NATIVE_STEPS_PER_REV * GEAR_RATIO * MICROSTEPS) 
 
+#define SETTLE_MS 500
 
 
-
-#define MY_MS1_PIN 13
-#define MY_MS2_PIN 15
-#define MY_MS3_PIN 16
-#define MY_SLP_PIN 19
-#define MY_STEP_PIN 17
-#define MY_DIR_PIN 18
+#define DIR_PIN  2
+#define STEP_PIN 3
+#define ENABLE_PIN 4
+#define HALF_STEP 5
 
 #define TEMP_AVE_SEC 20
 
-AccelStepper stepper(1, MY_STEP_PIN, MY_DIR_PIN);
+AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
 #define MAXCOMMAND 8
 
@@ -56,12 +54,8 @@ int half_step = 0;
 
 void setup()
 {  
-  pinMode(MY_MS1_PIN, OUTPUT);
-  digitalWrite(MY_MS1_PIN, LOW);
-  pinMode(MY_MS2_PIN, OUTPUT);
-  digitalWrite(MY_MS2_PIN, LOW);
-  pinMode(MY_MS3_PIN, OUTPUT);
-  digitalWrite(MY_MS3_PIN, LOW); 
+  pinMode(HALF_STEP, OUTPUT);
+  digitalWrite(HALF_STEP, LOW);
   Serial.begin(9600);
 
   // we ignore the Moonlite speed setting because Accelstepper implements
@@ -70,7 +64,7 @@ void setup()
   stepper.setMaxSpeed(STEPS_PER_REV / 2);
   stepper.setAcceleration(20);
   stepper.enableOutputs();
-  stepper.setEnablePin(MY_SLP_PIN);
+  stepper.setEnablePin(ENABLE_PIN);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
 }
@@ -90,7 +84,7 @@ void loop(){
       // reported on INDI forum that some steppers "stutter" if disableOutputs is done repeatedly
       // over a short interval; hence we only disable the outputs and release the motor some seconds
       // after movement has stopped
-      if ((millis() - millisLastMove) > 15000) {
+      if ((millis() - millisLastMove) > SETTLE_MS) {
         if (!half_step) {
           stepper.disableOutputs();
         }
@@ -243,13 +237,13 @@ void loop(){
     /* Set half-step mode */
     if (!strcasecmp(cmd, "SH")) {
         half_step = 1;
-        digitalWrite(MY_MS1_PIN, HIGH);
+        digitalWrite(HALF_STEP, HIGH);
     }
 
     /* Set full-step mode */
     if (!strcasecmp(cmd, "SF")) {
         half_step = 0;
-        digitalWrite(MY_MS1_PIN, LOW);
+        digitalWrite(HALF_STEP, LOW);
     }
 
     //Actually start the move
@@ -275,5 +269,3 @@ long hexstr2long(char *line) {
   ret = strtol(line, NULL, 16);
   return (ret);
 }
-
-
