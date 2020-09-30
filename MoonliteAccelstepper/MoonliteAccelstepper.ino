@@ -45,8 +45,9 @@
 #define ENABLE_PIN 4
 #define RESET_PIN 5 //Optional
 
-/* DS18B20 Pin */
+/* Optional feature pins */
 #define ONE_WIRE_BUS 10
+#define LED_PIN 9
 
 AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
@@ -56,29 +57,32 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress thermometer;
 #endif
 
-#define MAXCOMMAND 8
 
+//Input Handling
+#define MAXCOMMAND 8
 char inChar;
 char cmd[MAXCOMMAND];
 char param[MAXCOMMAND];
 char line[MAXCOMMAND];
+int eoc = 0;
+int idx = 0;
+
+//Internal State
+int lastTemp = 0;
+long millisLastTemp = 0;
+long millisLastMove = 0;
+
+//Moonlite State
 long pos;
 int isRunning = 0;
 int speed = 2;
-int eoc = 0;
-int idx = 0;
-long millisLastMove = 0;
 int half_step = 0;
-
-int lastTemp = 0;
-long millisLastTemp = 0;
+int light = 255;
 
 void setup()
 {  
   Serial.begin(9600);
   
-  // we ignore the Moonlite speed setting because Accelstepper implements
-  // ramping, making variable speeds un-necessary
   stepper.setMaxSpeed(MAXSPEED);
   stepper.setAcceleration(ACCELERATION);
   stepper.disableOutputs();
@@ -86,6 +90,10 @@ void setup()
   stepper.setPinsInverted(false,false,true);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
+
+#ifdef LED_PIN
+  analogWrite(LED_PIN, light);
+#endif
 
 #ifdef RESET_PIN
   //Reset driver and pulse it to align to a whole step
@@ -107,18 +115,6 @@ void setup()
   lastTemp = sensors.getTempC(thermometer)*2;
   sensors.setWaitForConversion(false);
 #endif
-}
-
-int getTemperature(){
-#ifdef ONE_WIRE_BUS
-  if ((millis() - millisLastTemp) > 1000 && !isRunning) {
-    lastTemp = sensors.getTempC(thermometer)*2;
-    motion();
-    sensors.requestTemperaturesByAddress(thermometer);
-    millisLastTemp = millis();
-  }
-#endif
-  return lastTemp;
 }
 
 void motion(){
@@ -220,8 +216,16 @@ void loop(){
     // get the current temperature
     // The temperature is sent in .5 *C units
     if (!strcasecmp(cmd, "GT")) {
+#ifdef ONE_WIRE_BUS
+    if ((millis() - millisLastTemp) > 1000 && !isRunning) {
+      lastTemp = sensors.getTempC(thermometer)*2;
+      motion();
+      sensors.requestTemperaturesByAddress(thermometer);
+      millisLastTemp = millis();
+    }
+#endif
       char tempString[6];
-      sprintf(tempString, "%04X", getTemperature());
+      sprintf(tempString, "%04X", lastTemp);
       Serial.print(tempString);
       Serial.print("#");
     }
@@ -231,6 +235,22 @@ void loop(){
       Serial.print("02#");
     }
 
+    // get the current light
+    if (!strcasecmp(cmd, "GB")) {
+      char tempString[6];
+      sprintf(tempString, "%02X", light);
+      Serial.print(tempString);
+      Serial.print("#");
+    }
+
+    //set the light
+    if (!strcasecmp(cmd, "SB")) {
+      light = hexstr2long(param);
+#ifdef LED_PIN
+      analogWrite(LED_PIN, light);
+#endif
+    }
+    
     // get the current motor speed, only values of 02, 04, 08, 10, 20
     if (!strcasecmp(cmd, "GD")) {
       char tempString[6];
