@@ -70,7 +70,7 @@ int idx = 0;
 long millisLastMove = 0;
 int half_step = 0;
 
-float degreesC = 0;
+int lastTemp = 0;
 long millisLastTemp = 0;
 
 void setup()
@@ -104,7 +104,7 @@ void setup()
   sensors.begin();
   sensors.getAddress(thermometer, 0);
   sensors.requestTemperaturesByAddress(thermometer);
-  degreesC = sensors.getTempC(thermometer);
+  lastTemp = sensors.getTempC(thermometer)*2;
   sensors.setWaitForConversion(false);
 #endif
 }
@@ -112,13 +112,13 @@ void setup()
 int getTemperature(){
 #ifdef ONE_WIRE_BUS
   if ((millis() - millisLastTemp) > 1000 && !isRunning) {
-    degreesC = sensors.getTempC(thermometer);
+    lastTemp = sensors.getTempC(thermometer)*2;
     motion();
     sensors.requestTemperaturesByAddress(thermometer);
     millisLastTemp = millis();
   }
 #endif
-  return degreesC;
+  return lastTemp;
 }
 
 void motion(){
@@ -221,7 +221,7 @@ void loop(){
     // The temperature is sent in .5 *C units
     if (!strcasecmp(cmd, "GT")) {
       char tempString[6];
-      sprintf(tempString, "%04X", (int)(getTemperature()*2));
+      sprintf(tempString, "%04X", getTemperature());
       Serial.print(tempString);
       Serial.print("#");
     }
