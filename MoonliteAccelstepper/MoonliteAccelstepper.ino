@@ -9,34 +9,52 @@
 //
 // orly.andico@gmail.com, 13 April 2014
 
-
 #include "src/AccelStepper/AccelStepper.h"
+#include "src/OneWire/OneWire.h" 
+#include "src/DallasTemperature/DallasTemperature.h"
 
+/* Microstepping Settings.
+ * Run full 16x microstepping all the time on hardware for smoothing and reducing resonance.
+ * 
+ * Multiply/devide commanded reported position by microsteps, so every 1 step from software results
+ * in 16 microsteps. Driver is reset on startup to ensure we always stop on full steps. This makes
+ * the position stay more stable when enabling / disabling the driver whild idle to reduce power
+ * usage and stepper heat.
+ */
+#define MICROSTEPS 16
+#define MICROSTEP_MULTIPLIER (half_step?MICROSTEPS:MICROSTEPS*2)
 
-// maximum speed is 160pps which should be OK for most
-// tin can steppers
-#define MAXSPEED 100
-
-/* Microstepping mode of driver (microsteps/full step) */
-#define MICROSTEPS 1
-/* The gear ratio of the stepper */
-#define GEAR_RATIO 64
+/* The gear ratio of the stepper to focuser. 3 means 3 stepper rotations to one focuser rotation */
+#define GEAR_RATIO 3
 /* How many steps per full revolution of the motor itself (not including gearing) */
-#define NATIVE_STEPS_PER_REV 48
+#define NATIVE_STEPS_PER_REV 200
 /* How many pulses of the STEP pin for one revolution of gear shaft */
-#define STEPS_PER_REV (NATIVE_STEPS_PER_REV * GEAR_RATIO * MICROSTEPS) 
+#define STEPS_PER_REV (NATIVE_STEPS_PER_REV * GEAR_RATIO * MICROSTEPS)
 
+/*How many seconds for one rotation of the output in full step mode*/
+#define SECONDS_PER_REV 3
+#define MAXSPEED (STEPS_PER_REV / SECONDS_PER_REV)
+#define ACCELERATION 500
+
+/*How long wait after motion is stopped to disable stepper */
 #define SETTLE_MS 500
 
-
+/* Stepper pins */
 #define DIR_PIN  2
 #define STEP_PIN 3
 #define ENABLE_PIN 4
-#define HALF_STEP 5
+#define RESET_PIN 5 //Optional
 
-#define TEMP_AVE_SEC 20
+/* DS18B20 Pin */
+#define ONE_WIRE_BUS 10
 
 AccelStepper stepper(1, STEP_PIN, DIR_PIN);
+
+#ifdef ONE_WIRE_BUS
+OneWire oneWire(ONE_WIRE_BUS); 
+DallasTemperature sensors(&oneWire);
+DeviceAddress thermometer;
+#endif
 
 #define MAXCOMMAND 8
 
@@ -46,73 +64,101 @@ char param[MAXCOMMAND];
 char line[MAXCOMMAND];
 long pos;
 int isRunning = 0;
-int speed = 32;
+int speed = 2;
 int eoc = 0;
 int idx = 0;
 long millisLastMove = 0;
 int half_step = 0;
 
+float degreesC = 0;
+long millisLastTemp = 0;
+
 void setup()
 {  
-  pinMode(HALF_STEP, OUTPUT);
-  digitalWrite(HALF_STEP, LOW);
   Serial.begin(9600);
-
+  
   // we ignore the Moonlite speed setting because Accelstepper implements
   // ramping, making variable speeds un-necessary
-  stepper.setSpeed(STEPS_PER_REV / 2);
-  stepper.setMaxSpeed(STEPS_PER_REV / 2);
-  stepper.setAcceleration(20);
-  stepper.enableOutputs();
+  stepper.setMaxSpeed(MAXSPEED);
+  stepper.setAcceleration(ACCELERATION);
+  stepper.disableOutputs();
   stepper.setEnablePin(ENABLE_PIN);
+  stepper.setPinsInverted(false,false,true);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
+
+#ifdef RESET_PIN
+  //Reset driver and pulse it to align to a whole step
+  pinMode(RESET_PIN, OUTPUT);
+  digitalWrite(RESET_PIN, LOW);
+  delay(10);
+  digitalWrite(RESET_PIN, HIGH);
+  delay(10);
+  stepper.enableOutputs();
+  delay(10);
+  stepper.disableOutputs();
+#endif
+
+#ifdef ONE_WIRE_BUS
+  //Start up sensors
+  sensors.begin();
+  sensors.getAddress(thermometer, 0);
+  sensors.requestTemperaturesByAddress(thermometer);
+  degreesC = sensors.getTempC(thermometer);
+  sensors.setWaitForConversion(false);
+#endif
 }
 
+int getTemperature(){
+#ifdef ONE_WIRE_BUS
+  if ((millis() - millisLastTemp) > 1000 && !isRunning) {
+    degreesC = sensors.getTempC(thermometer);
+    motion();
+    sensors.requestTemperaturesByAddress(thermometer);
+    millisLastTemp = millis();
+  }
+#endif
+  return degreesC;
+}
 
-
-void loop(){
-
-  // run the stepper if there's no pending command and if there are pending movements
-  if (!Serial.available())
-  {
-    if (isRunning) {
-      stepper.run();
-      millisLastMove = millis();
-    } 
-    else {
-      // reported on INDI forum that some steppers "stutter" if disableOutputs is done repeatedly
-      // over a short interval; hence we only disable the outputs and release the motor some seconds
-      // after movement has stopped
-      if ((millis() - millisLastMove) > SETTLE_MS) {
-        if (!half_step) {
-          stepper.disableOutputs();
-        }
-      }
-    }
-
-    if (stepper.distanceToGo() == 0) {
-      stepper.run();
-      isRunning = 0;
-    }
+void motion(){
+  //Motion Controll
+  if (isRunning) {
+    stepper.run();
+    millisLastMove = millis();
   } 
   else {
+    // reported on INDI forum that some steppers "stutter" if disableOutputs is done repeatedly
+    // over a short interval; hence we only disable the outputs and release the motor some seconds
+    // after movement has stopped
+    if ((millis() - millisLastMove) > SETTLE_MS) {
+       stepper.disableOutputs();
+    }
+  }
+  if (stepper.distanceToGo() == 0) {
+    stepper.run();
+    isRunning = 0;
+  }
+}
 
-    // read the command until the terminating # character
-    while (Serial.available() && !eoc) {
-      inChar = Serial.read();
-      if (inChar != '#' && inChar != ':') {
-        line[idx++] = inChar;
-        if (idx >= MAXCOMMAND) {
-          idx = MAXCOMMAND - 1;
-        }
-      } 
-      else {
-        if (inChar == '#') {
-          eoc = 1;
-        }
+void loop(){
+  motion();
+
+  //Read One Character from serial
+  if (Serial.available()) {
+    inChar = Serial.read();
+    if (inChar != '#' && inChar != ':') {
+      line[idx++] = inChar;
+      if (idx >= MAXCOMMAND) {
+        idx = MAXCOMMAND - 1;
+      }
+    } 
+    else {
+      if (inChar == '#') {
+        eoc = 1;
       }
     }
+    motion();
   } // end if (!Serial.available())
 
   // process the command we got
@@ -155,7 +201,7 @@ void loop(){
 
     // get the current motor position
     if (!strcasecmp(cmd, "GP")) {
-      pos = stepper.currentPosition();
+      pos = stepper.currentPosition() / MICROSTEP_MULTIPLIER;
       char tempString[6];
       sprintf(tempString, "%04X", pos);
       Serial.print(tempString);
@@ -164,7 +210,7 @@ void loop(){
 
     // get the new motor position (target)
     if (!strcasecmp(cmd, "GN")) {
-      pos = stepper.targetPosition();
+      pos = stepper.targetPosition() / MICROSTEP_MULTIPLIER;
       char tempString[6];
       sprintf(tempString, "%04X", pos);
       Serial.print(tempString);
@@ -174,7 +220,10 @@ void loop(){
     // get the current temperature
     // The temperature is sent in .5 *C units
     if (!strcasecmp(cmd, "GT")) {
-      Serial.print("0020#");
+      char tempString[6];
+      sprintf(tempString, "%04X", (int)(getTemperature()*2));
+      Serial.print(tempString);
+      Serial.print("#");
     }
 
     // get the temperature coefficient, hard-coded
@@ -193,14 +242,11 @@ void loop(){
     // set speed, only acceptable values are 02, 04, 08, 10, 20
     if (!strcasecmp(cmd, "SD")) {
       speed = hexstr2long(param);
-
-      // we ignore the Moonlite speed setting because Accelstepper implements
-      // ramping, making variable speeds un-necessary
-
-      // stepper.setSpeed(speed * SPEEDMULT);
-      // stepper.setMaxSpeed(speed * SPEEDMULT);
-      stepper.setSpeed(MAXSPEED);
-      stepper.setMaxSpeed(MAXSPEED);
+      //Setting the speed too close to the end causes accelstepper to
+      //overshoot when moving positive, and freak out when moving negative
+      if ( abs(stepper.distanceToGo()) > 20 ){
+        stepper.setMaxSpeed(MAXSPEED * 2L / speed);
+      }
     }
 
     /* Get half-stepping */
@@ -225,30 +271,29 @@ void loop(){
     // set current motor position
     if (!strcasecmp(cmd, "SP")) {
       pos = hexstr2long(param);
-      stepper.setCurrentPosition(pos);
+      stepper.setCurrentPosition(pos * MICROSTEP_MULTIPLIER);
     }
 
     // set new motor position
     if (!strcasecmp(cmd, "SN")) {
       pos = hexstr2long(param);
-      stepper.moveTo(pos);
+      stepper.moveTo(pos * MICROSTEP_MULTIPLIER);
     }
 
     /* Set half-step mode */
     if (!strcasecmp(cmd, "SH")) {
         half_step = 1;
-        digitalWrite(HALF_STEP, HIGH);
     }
 
     /* Set full-step mode */
     if (!strcasecmp(cmd, "SF")) {
         half_step = 0;
-        digitalWrite(HALF_STEP, LOW);
     }
 
     //Actually start the move
     if (!strcasecmp(cmd, "FG")) {
       isRunning = 1;
+      stepper.setMaxSpeed(MAXSPEED * 2L / speed);
       stepper.enableOutputs();
       delay(1);
     }
@@ -258,6 +303,7 @@ void loop(){
       isRunning = 0;
       stepper.moveTo(stepper.currentPosition());
       stepper.run();
+      stepper.disableOutputs();
     }
 
   }
