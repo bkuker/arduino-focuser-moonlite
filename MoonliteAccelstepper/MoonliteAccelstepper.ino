@@ -42,12 +42,17 @@
 /* Stepper pins */
 #define DIR_PIN  2
 #define STEP_PIN 3
-#define ENABLE_PIN 4
+#define ENABLE_PIN 9
 #define RESET_PIN 5 //Optional
 
+#define MS3 6
+#define MS2 7
+#define MS1 8
+#define SLEEP_PIN 4
+
 /* Optional feature pins */
-#define ONE_WIRE_BUS 10
-#define LED_PIN 9
+#define ONE_WIRE_BUS 11
+#define LED_PIN 10
 
 AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
@@ -94,6 +99,16 @@ void setup()
 #ifdef LED_PIN
   analogWrite(LED_PIN, light);
 #endif
+
+  pinMode(MS1, OUTPUT);
+  digitalWrite(MS1, HIGH);
+  pinMode(MS2, OUTPUT);
+  digitalWrite(MS2, HIGH);
+  pinMode(MS3, OUTPUT);
+  digitalWrite(MS3, HIGH);
+  pinMode(SLEEP_PIN, OUTPUT);
+  digitalWrite(SLEEP_PIN, HIGH);
+  
 
 #ifdef RESET_PIN
   //Reset driver and pulse it to align to a whole step
