@@ -53,7 +53,7 @@ AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 
 void setupStepper()
 {
-  stepper.setMaxSpeed(MAXSPEED*10);
+  stepper.setMaxSpeed(MAXSPEED);
   stepper.setAcceleration(ACCELERATION);
   stepper.setEnablePin(ENABLE_PIN);
   stepper.disableOutputs();
@@ -94,9 +94,12 @@ void loop()
 {
   long now = millis();
   //Motion Controll
-  if (stepper.run())
+  if (stepper.distanceToGo())
   {
-    millisLastMove = now;
+    if (stepper.run())
+    {
+      millisLastMove = now;
+    }
   }
   else
   {
@@ -106,7 +109,6 @@ void loop()
     if ((now - millisLastMove) > SETTLE_MS)
     {
       stepper.disableOutputs();
-      digitalWrite(ENABLE_PIN, HIGH);
     }
   }
 
@@ -114,7 +116,7 @@ void loop()
   {
     millisLastPrint = now;
     Serial.print("Position ");
-    Serial.println(stepper.currentPosition()/MICROSTEPS);
+    Serial.println(stepper.currentPosition() / MICROSTEPS);
   }
 }
 
@@ -200,15 +202,17 @@ void setupServer()
 
   server.on("/api/v1/focuser/0/halt", HTTP_PUT, consumer([](AsyncWebServerRequest *request) {
               stepper.moveTo(stepper.currentPosition());
+              stepper.setMaxSpeed(1);
               stepper.disableOutputs();
               Serial.println("Halted");
             }));
 
   server.on("/api/v1/focuser/0/move", HTTP_PUT, consumer([](AsyncWebServerRequest *request) {
-              stepper.moveTo(request->getParam("Position", true)->value().toInt()*MICROSTEPS);
+              stepper.setMaxSpeed(MAXSPEED);
               stepper.enableOutputs();
+              stepper.moveTo(request->getParam("Position", true)->value().toInt() * MICROSTEPS);
               Serial.print("Moving to ");
-              Serial.println(stepper.targetPosition()/MICROSTEPS);
+              Serial.println(stepper.targetPosition() / MICROSTEPS);
             }));
 
   server.begin();

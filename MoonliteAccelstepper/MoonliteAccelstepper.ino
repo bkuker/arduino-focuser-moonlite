@@ -45,6 +45,7 @@
 #define ENABLE_PIN 9
 #define RESET_PIN 5 //Optional
 
+//Not used, but might be hooked to arduino for lazyness
 #define MS3 6
 #define MS2 7
 #define MS1 8
@@ -79,7 +80,6 @@ long millisLastMove = 0;
 
 //Moonlite State
 long pos;
-int isRunning = 0;
 int speed = 2;
 int half_step = 0;
 int light = 255;
@@ -92,7 +92,7 @@ void setup()
   stepper.setAcceleration(ACCELERATION);
   stepper.disableOutputs();
   stepper.setEnablePin(ENABLE_PIN);
-  stepper.setPinsInverted(false,false,true);
+  stepper.setPinsInverted(true,false,true);
   memset(line, 0, MAXCOMMAND);
   millisLastMove = millis();
 
@@ -134,8 +134,7 @@ void setup()
 
 void motion(){
   //Motion Controll
-  if (isRunning) {
-    stepper.run();
+  if (stepper.run()) {
     millisLastMove = millis();
   } 
   else {
@@ -145,10 +144,6 @@ void motion(){
     if ((millis() - millisLastMove) > SETTLE_MS) {
        stepper.disableOutputs();
     }
-  }
-  if (stepper.distanceToGo() == 0) {
-    stepper.run();
-    isRunning = 0;
   }
 }
 
@@ -200,9 +195,8 @@ void loop(){
 
     // home the motor, hard-coded, ignore parameters since we only have one motor
     if (!strcasecmp(cmd, "PH")) { 
-      stepper.setCurrentPosition(8000);
+      stepper.setCurrentPosition(100);
       stepper.moveTo(0);
-      isRunning = 1;
     }
 
     // firmware value, always return "10"
@@ -232,7 +226,7 @@ void loop(){
     // The temperature is sent in .5 *C units
     if (!strcasecmp(cmd, "GT")) {
 #ifdef ONE_WIRE_BUS
-    if ((millis() - millisLastTemp) > 1000 && !isRunning) {
+    if ((millis() - millisLastTemp) > 1000 && !stepper.distanceToGo() ) {
       lastTemp = sensors.getTempC(thermometer)*2;
       motion();
       sensors.requestTemperaturesByAddress(thermometer);
@@ -327,7 +321,6 @@ void loop(){
 
     //Actually start the move
     if (!strcasecmp(cmd, "FG")) {
-      isRunning = 1;
       stepper.setMaxSpeed(MAXSPEED * 2L / speed);
       stepper.enableOutputs();
       delay(1);
@@ -335,9 +328,8 @@ void loop(){
 
     // stop a move
     if (!strcasecmp(cmd, "FQ")) {
-      isRunning = 0;
       stepper.moveTo(stepper.currentPosition());
-      stepper.run();
+      stepper.setMaxSpeed(1);
       stepper.disableOutputs();
     }
 
