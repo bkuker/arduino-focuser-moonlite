@@ -335,6 +335,8 @@ void setupServer() {
   server.on("/api/v1/telescope/0/slewtocoordinates", HTTP_PUT, unimplemented);
   // Asynchronously slew to the given equatorial coordinates.
   server.on("/api/v1/telescope/0/slewtocoordinatesasync", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    if ( parked )
+      throw ASCOM_INVALID_WHILE_PARKED(SlewToCoordinatesAsync);
     double ra = request->getParam("RightAscension", true)->value().toDouble();
     double dec = request->getParam("Declination", true)->value().toDouble();
 
@@ -389,6 +391,8 @@ void setupServer() {
   server.on("/api/v1/telescope/0/slewtotarget", HTTP_PUT, unimplemented);
   // Asynchronously slew to the TargetRightAscension and TargetDeclination
   server.on("/api/v1/telescope/0/slewtotargetasync", HTTP_PUT, command([](){
+    if ( parked )
+      throw ASCOM_INVALID_WHILE_PARKED(SlewToCoordinatesAsync);
     targetRA = nextTargetRA;
     targetDec = nextTargetDec;
     float alt, az;
