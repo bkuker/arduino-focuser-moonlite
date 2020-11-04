@@ -7,8 +7,7 @@
 
 #ifndef ASTROCLOCK_H_
 #define ASTROCLOCK_H_
-
-#include "Clock.h"
+#include "Arduino.h"
 
 class AstroClock {
 private:
