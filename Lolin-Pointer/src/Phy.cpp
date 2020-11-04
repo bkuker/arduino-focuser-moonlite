@@ -42,6 +42,7 @@ Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0) {
   pinMode(AZ_DIR, OUTPUT);
   pinMode(ALT_STEP, OUTPUT);
   pinMode(ALT_DIR, OUTPUT);
+  setAltAz(0,0); //initialize all bresenham variables
 }
 
 float Phy::getAlt() {
@@ -58,7 +59,7 @@ float Phy::getAz() {
 }
 
 void Phy::setAltAz(float altD, float azD) {
-  Serial.print("Setting Alt: ");
+  Serial.print("Setting Target Alt: ");
   Serial.print(altD);
   Serial.print(", Az: ");
   Serial.print(azD);
@@ -72,29 +73,36 @@ void Phy::setAltAz(float altD, float azD) {
   az_target = AZ_STEPS_PER_REV * (azD / 360.0);
   int azDiff = az_target - az_cur;
 
+  /*
   Serial.print("Az steps: ");
   Serial.print(AZ_STEPS_PER_REV);
   Serial.print(", Alt steps: ");
   Serial.print(ALT_STEPS_PER_REV);
   Serial.println();
+  */
 
   int altExtra = (azDiff * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV;
 
+  /*
   Serial.print("Az Diff: ");
   Serial.print(azDiff);
   Serial.print(", Alt Extra: ");
   Serial.print(altExtra);
   Serial.println();
+  */
 
   alt_target = altExtra + ALT_STEPS_PER_REV * (altD / 360.0);
 
+  /*
   Serial.print("Target Alt: ");
   Serial.print(alt_target);
   Serial.print(", Az: ");
   Serial.print(az_target);
   Serial.println();
+  */
 
   bresSetup(az_target, alt_target);
+  moving = true;
 }
 
 void Phy::tick() {
@@ -127,9 +135,11 @@ void Phy::tick() {
 
 	az_cur = x;
 	alt_cur = y;
-  } else {
+  } else if (moving ) {
+    moving = false;
 	  az_cur = az_target;
 	  alt_cur = alt_target;
+    Serial.println("Arrived at target");
   }
 }
 

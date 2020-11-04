@@ -9,6 +9,8 @@ private:
 	int alt_target;
 	int az_target;
 
+	bool moving;
+
 	void bresSetup(float xf, float yf);
 
 	//bresenham line drawing state
