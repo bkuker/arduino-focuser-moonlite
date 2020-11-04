@@ -4,19 +4,42 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
+#include <Time.h>
+
+
+#include <sstream>
+#include <iostream>
+#include <iomanip>
 
 #include "Phy.h"
+#include "AstroClock.h"
 
+
+void dms(float a) {
+	int d = floor(a);
+	int m = floor((a - d) * 60);
+	int s = floor((((a - d) * 60) - m) * 60);
+	Serial.print(d);
+	Serial.print("°");
+	Serial.print(m);
+	Serial.print("'");
+	Serial.print(s);
+	Serial.print("\"");
+}
+
+std::string getCurrentTimeFormatted();
 void setupWifi();
 void setupServer();
 
 Phy phy;
+AstroClock as = AstroClock(43.554736, -73.249809);
 
 void setup() {
   Serial.begin(9600);
   setupWifi();
-  setupServer();
+  configTime(0, 0, "pool.ntp.org");
   phy.setAltAz(0,0);
+  setupServer();
 }
 
 void loop() {
@@ -91,23 +114,21 @@ void setupServer() {
 
   ///////// Common
 
-  // Invokes the named device-specific action.
-  server.on("/api/v1/telescope/0/action", HTTP_PUT, unimplemented);
+  // Device name
+  server.on("/api/v1/telescope/0/name", HTTP_GET, constant("Telescope Bot"));
+  // Device description
+  server.on("/api/v1/telescope/0/description", HTTP_GET, constant("ESP32 Alpaca Telescope"));
 
-  // Transmits an arbitrary string to the device
-  server.on("/api/v1/telescope/0/commandblind", HTTP_PUT, unimplemented);
+  // The ASCOM Device interface version number that this device supports.
+  server.on("/api/v1/telescope/0/interfaceversion", HTTP_GET, constant(2));
+  // Device driver description
+  server.on("/api/v1/telescope/0/driverinfo", HTTP_GET, constant("telescope"));
+  // Driver Version
+  server.on("/api/v1/telescope/0/driverversion", HTTP_GET, constant("0.1"));
 
-  // Transmits an arbitrary string to the device and returns a boolean value
-  // from the device.
-  server.on("/api/v1/telescope/0/commandbool", HTTP_PUT, unimplemented);
-
-  // Transmits an arbitrary string to the device and returns a string value from
-  // the device.
-  server.on("/api/v1/telescope/0/commandstring", HTTP_PUT, unimplemented);
-
+  //Connected
   // Retrieves the connected state of the device
   server.on("/api/v1/telescope/0/connected", HTTP_GET, producer([]() { return connected; }));
-
   // Sets the connected state of the device
   server.on("/api/v1/telescope/0/connected", HTTP_PUT, function([](AsyncWebServerRequest *request) {
               return connected = request->getParam("Connected", true)->value().equalsIgnoreCase("true");
@@ -115,24 +136,24 @@ void setupServer() {
               Serial.println(connected);
             }));
 
-
-  // Device description
-  server.on("/api/v1/telescope/0/description", HTTP_GET, constant("ESP32 Alpaca Telescope"));
-
-  // Device driver description
-  server.on("/api/v1/telescope/0/driverinfo", HTTP_GET, constant("telescope"));
-
-  // Driver Version
-  server.on("/api/v1/telescope/0/driverversion", HTTP_GET, constant("0.1"));
-
-  // The ASCOM Device interface version number that this device supports.
-  server.on("/api/v1/telescope/0/interfaceversion", HTTP_GET, constant(2));
-
-  // Device name
-  server.on("/api/v1/telescope/0/name", HTTP_GET, constant("Telescope Bot"));
-
+  //Actions
   // Returns the list of action names supported by this driver.
   server.on("/api/v1/telescope/0/supportedactions", HTTP_GET, unimplemented);
+  // Invokes the named device-specific action.
+  server.on("/api/v1/telescope/0/action", HTTP_PUT, unimplemented);
+
+  //Commands
+  // Transmits an arbitrary string to the device
+  server.on("/api/v1/telescope/0/commandblind", HTTP_PUT, unimplemented);
+  // Transmits an arbitrary string to the device and returns a boolean value
+  // from the device.
+  server.on("/api/v1/telescope/0/commandbool", HTTP_PUT, unimplemented);
+  // Transmits an arbitrary string to the device and returns a string value from
+  // the device.
+  server.on("/api/v1/telescope/0/commandstring", HTTP_PUT, unimplemented);
+
+
+
 
   //////// TELESCOPE
 
@@ -241,13 +262,29 @@ void setupServer() {
   // Sets the observing site's elevation above mean sea level.
   server.on("/api/v1/telescope/0/siteelevation", HTTP_PUT, unimplemented);
   // Returns the observing site's latitude.
-  server.on("/api/v1/telescope/0/sitelatitude", HTTP_GET, unimplemented);
-  // Sets the observing site's latitude.
-  server.on("/api/v1/telescope/0/sitelatitude", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/sitelatitude", HTTP_GET, producer([](){
+    return as.getLat();
+  }));
   // Returns the observing site's longitude.
-  server.on("/api/v1/telescope/0/sitelongitude", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/sitelongitude", HTTP_GET, producer([](){
+    return as.getLon();
+  }));
+  // Sets the observing site's latitude.
+  server.on("/api/v1/telescope/0/sitelatitude", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double lat = request->getParam("SiteLatitude", true)->value().toDouble();
+    if ( lat > 90 || lat < -90 ){
+      throw std::invalid_argument("Invalid Latitude");
+    }
+    as.setLat(lat);
+  }));
   // Sets the observing site's longitude.
-  server.on("/api/v1/telescope/0/sitelongitude", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/sitelongitude", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double lon = request->getParam("SiteLongitude", true)->value().toDouble();
+    if ( lon > 180 || lon < -180 ){
+      throw std::invalid_argument("Invalid Longitude");
+    }
+    as.setLon(lon);
+  }));
 
   //Pier
   // Indicates whether the telescope SideOfPier can be set.
@@ -304,9 +341,13 @@ void setupServer() {
   // Indicates whether the telescope can slew asynchronously to AltAz
   server.on("/api/v1/telescope/0/canslewaltazasync", HTTP_GET, constant(true));
   // Returns the mount's altitude above the horizon.
-  server.on("/api/v1/telescope/0/altitude", HTTP_GET, producer([](){return phy.getAlt();}));
+  server.on("/api/v1/telescope/0/altitude", HTTP_GET, producer([](){
+    return phy.getAlt();
+  }));
   // Returns the mount's azimuth.
-  server.on("/api/v1/telescope/0/azimuth", HTTP_GET, producer([](){return phy.getAlt();}));
+  server.on("/api/v1/telescope/0/azimuth", HTTP_GET, producer([](){
+    return phy.getAlt();
+  }));
   // Synchronously slew to the given local horizontal coordinates.
   server.on("/api/v1/telescope/0/slewtoaltaz", HTTP_PUT, unimplemented);
   // Asynchronously slew to the given local horizontal coordinates.
@@ -337,15 +378,24 @@ void setupServer() {
 
   //Current Position
   // Returns the mount's declination.
-  server.on("/api/v1/telescope/0/declination", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/declination", HTTP_GET, producer([](){
+    float ra, dec;
+    as.unconvert(time(NULL), phy.getAlt(), phy.getAz(), &ra, &dec);
+    return dec;
+  }));
   // Returns the mount's right ascension coordinate.
-  server.on("/api/v1/telescope/0/rightascension", HTTP_GET, unimplemented);
-
+  server.on("/api/v1/telescope/0/rightascension", HTTP_GET, producer([](){
+    float ra, dec;
+    as.unconvert(time(NULL), phy.getAlt(), phy.getAz(), &ra, &dec);
+    return (ra/360.0f)*24.0f;
+  }));
   //Time
   // Returns the local apparent sidereal time.
-  server.on("/api/v1/telescope/0/siderealtime", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/siderealtime", HTTP_GET, producer([](){
+    return as.localSiderealTime(time(NULL));
+  }));
   // Returns the UTC date/time of the telescope's internal clock.
-  server.on("/api/v1/telescope/0/utcdate", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/utcdate", HTTP_GET, producer(getCurrentTimeFormatted));
   // Sets the UTC date/time of the telescope's internal clock.
   server.on("/api/v1/telescope/0/utcdate", HTTP_PUT, unimplemented);
 
@@ -421,13 +471,19 @@ std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f) {
     AsyncResponseStream *response =
         request->beginResponseStream("application/json");
     DynamicJsonDocument doc(1024);
-    f(request, doc);
+    try {
+      f(request, doc);
+      doc["ErrorNumber"] = 0;
+      doc["ErrorMessage"] = "";
+    } catch ( std::invalid_argument e ){
+      doc["ErrorNumber"] = 1025;
+      doc["ErrorMessage"] = "Invalid Argument";
+    }
+
     AsyncWebParameter *cID =
         request->getParam("ClientTransactionID", request->method() == HTTP_PUT);
     doc["ClientTransactionID"] = cID ? cID->value().toInt() : -1;
     doc["ServerTransactionID"] = ++serverTransactionID;
-    doc["ErrorNumber"] = 0;
-    doc["ErrorMessage"] = "";
     serializeJson(doc, *response);
     request->send(response);
   };
@@ -449,4 +505,27 @@ std::function<void(AsyncWebServerRequest *request)> error(int error,
     serializeJson(doc, *response);
     request->send(response);
   };
+}
+
+std::string getCurrentTimeFormatted(){
+    //yyyy-MM-ddTHH:mm:ss.fffffffZ
+    time_t rawtime;
+    struct tm *info;
+    time(&rawtime);
+    info = gmtime(&rawtime );
+
+    std::ostringstream ss;
+    ss << (1900 + info->tm_year);
+    ss << "-";
+    ss << std::setw( 2 ) << std::setfill( '0' ) << (1+info->tm_mon);
+    ss << "-";
+    ss << std::setw( 2 ) << std::setfill( '0' ) << info->tm_mday;
+    ss << "T";
+    ss << std::setw( 2 ) << std::setfill( '0' ) << info->tm_hour;
+    ss << ":";
+    ss << std::setw( 2 ) << std::setfill( '0' ) << info->tm_min;
+    ss << ":";
+    ss << std::setw( 2 ) << std::setfill( '0' ) << info->tm_sec;
+    ss << ".0000000Z" ;
+    return ss.str();
 }
