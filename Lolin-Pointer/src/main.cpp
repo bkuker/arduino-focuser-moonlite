@@ -11,9 +11,10 @@
 #include <iostream>
 #include <iomanip>
 
+
 #include "Phy.h"
 #include "AstroClock.h"
-
+#include "Error.h"
 
 void dms(float a) {
 	int d = floor(a);
@@ -82,6 +83,12 @@ boolean parked = false;
 int parkAlt = 0;
 int parkAz = 0;
 
+//Target
+double targetRA = 0;
+double targetDec = 0;
+double nextTargetRA = -1;
+double nextTargetDec = -1;
+
 //Tracking
 boolean isTracking = true;
 
@@ -106,7 +113,7 @@ std::function<void(AsyncWebServerRequest *request)> unimplemented =
 
 void setupServer() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->redirect("/api/v1/api/v1/telescope/0/name");
+    request->redirect("/api/v1/telescope/0/name");
   });
 
   server.onNotFound([](AsyncWebServerRequest *request) {
@@ -232,7 +239,12 @@ void setupServer() {
   // Sets the mount's tracking rate.
   server.on("/api/v1/telescope/0/trackingrate", HTTP_PUT, unimplemented);
   // Returns a collection of supported DriveRates values.
-  server.on("/api/v1/telescope/0/trackingrates", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/trackingrates", HTTP_GET, producer([](){
+    StaticJsonDocument<JSON_ARRAY_SIZE(1)> doc;
+    JsonArray array = doc.to<JsonArray>();
+    array.add(0);
+    return array;
+  }));
 
 
 
@@ -279,7 +291,7 @@ void setupServer() {
   server.on("/api/v1/telescope/0/sitelatitude", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
     double lat = request->getParam("SiteLatitude", true)->value().toDouble();
     if ( lat > 90 || lat < -90 ){
-      throw std::invalid_argument("Invalid Latitude");
+      throw ASCOM_INVALID(Latitude);
     }
     as.setLat(lat);
   }));
@@ -287,7 +299,7 @@ void setupServer() {
   server.on("/api/v1/telescope/0/sitelongitude", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
     double lon = request->getParam("SiteLongitude", true)->value().toDouble();
     if ( lon > 180 || lon < -180 ){
-      throw std::invalid_argument("Invalid Longitude");
+      throw ASCOM_INVALID(Longitude);
     }
     as.setLon(lon);
   }));
@@ -316,34 +328,77 @@ void setupServer() {
   // Indicates whether the telescope can slew synchronously.
   server.on("/api/v1/telescope/0/canslew", HTTP_GET, constant(false));
   // Indicates whether the telescope can slew asynchronously.
-  server.on("/api/v1/telescope/0/canslewasync", HTTP_GET, constant(false));
+  server.on("/api/v1/telescope/0/canslewasync", HTTP_GET, constant(true));
 
   //////Slew - Equitorial
   // Synchronously slew to the given equatorial coordinates.
   server.on("/api/v1/telescope/0/slewtocoordinates", HTTP_PUT, unimplemented);
   // Asynchronously slew to the given equatorial coordinates.
-  server.on("/api/v1/telescope/0/slewtocoordinatesasync", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/slewtocoordinatesasync", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double ra = request->getParam("RightAscension", true)->value().toDouble();
+    double dec = request->getParam("Declination", true)->value().toDouble();
+
+    if ( ra < 0 || ra > 24 ){
+      throw ASCOM_INVALID(Right Ascension);
+    }
+    if ( dec < -90 || dec > 90 ){
+      throw ASCOM_INVALID(Declination);
+    }
+
+    targetRA = nextTargetRA = ra;
+    targetDec = nextTargetDec = dec;
+    float alt, az;
+
+    as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
+    phy.setAltAz(alt, az);
+  }));
 
 
 
 
   //////Slew - RA /Dec
   // Returns the current target declination.
-  server.on("/api/v1/telescope/0/targetdeclination", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/targetdeclination", HTTP_GET, producer([](){
+    if ( nextTargetDec == -1 )
+      throw ASCOM_UNSET(Declination);
+    return nextTargetDec;
+  }));
   // Returns the current target right ascension.
-  server.on("/api/v1/telescope/0/targetrightascension", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/targetrightascension", HTTP_GET, producer([](){
+    if ( nextTargetRA == -1 )
+      throw  ASCOM_UNSET(Right Ascension);
+    return nextTargetRA;
+  }));
   // Sets the target declination of a slew or sync.
-  server.on("/api/v1/telescope/0/targetdeclination", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/targetdeclination", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double dec = request->getParam("TargetDeclination", true)->value().toDouble();
+    if ( dec < -90 || dec > 90 ){
+      throw ASCOM_INVALID(Declination);
+    }
+    nextTargetDec = dec;
+  }));
   // Sets the target right ascension of a slew or sync.
-  server.on("/api/v1/telescope/0/targetrightascension", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/targetrightascension", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double ra = request->getParam("TargetRightAscension", true)->value().toDouble();
+    if ( ra < 0 || ra > 24 ){
+      throw ASCOM_INVALID(Right Ascension);
+    } 
+    nextTargetRA = ra;
+  }));
   // Synchronously slew to the TargetRightAscension and TargetDeclination
   server.on("/api/v1/telescope/0/slewtotarget", HTTP_PUT, unimplemented);
   // Asynchronously slew to the TargetRightAscension and TargetDeclination
-  server.on("/api/v1/telescope/0/slewtotargetasync", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/slewtotargetasync", HTTP_PUT, command([](){
+    targetRA = nextTargetRA;
+    targetDec = nextTargetDec;
+    float alt, az;
+    as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
+    phy.setAltAz(alt, az);
+  }));
 
   //////Slew - Alt / Az
   // Indicates whether the telescope can slew synchronously to AltAz
-  server.on("/api/v1/telescope/0/canslewaltaz", HTTP_GET, constant(true));
+  server.on("/api/v1/telescope/0/canslewaltaz", HTTP_GET, constant(false));
   // Indicates whether the telescope can slew asynchronously to AltAz
   server.on("/api/v1/telescope/0/canslewaltazasync", HTTP_GET, constant(true));
   // Returns the mount's altitude above the horizon.
@@ -352,12 +407,16 @@ void setupServer() {
   }));
   // Returns the mount's azimuth.
   server.on("/api/v1/telescope/0/azimuth", HTTP_GET, producer([](){
-    return phy.getAlt();
+    return phy.getAz();
   }));
   // Synchronously slew to the given local horizontal coordinates.
   server.on("/api/v1/telescope/0/slewtoaltaz", HTTP_PUT, unimplemented);
   // Asynchronously slew to the given local horizontal coordinates.
-  server.on("/api/v1/telescope/0/slewtoaltazasync", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/slewtoaltazasync", HTTP_PUT, consumer([](AsyncWebServerRequest *request){
+    double alt = request->getParam("Altitude", true)->value().toDouble();
+    double az = request->getParam("Azimuth", true)->value().toDouble();
+    phy.setAltAz(alt, az);
+  }));
 
 
   // Sync
@@ -374,7 +433,9 @@ void setupServer() {
 
   //Motion
   // Indicates whether the telescope is currently slewing.
-  server.on("/api/v1/telescope/0/slewing", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/slewing", HTTP_GET, producer([](){
+    return phy.isMoving();
+  }));
   // Returns the post-slew settling time.
   server.on("/api/v1/telescope/0/slewsettletime", HTTP_GET, unimplemented);
   // Sets the post-slew settling time.
@@ -395,6 +456,7 @@ void setupServer() {
     as.unconvert(time(NULL), phy.getAlt(), phy.getAz(), &ra, &dec);
     return (ra/360.0f)*24.0f;
   }));
+
   //Time
   // Returns the local apparent sidereal time.
   server.on("/api/v1/telescope/0/siderealtime", HTTP_GET, producer([](){
@@ -410,17 +472,16 @@ void setupServer() {
 
 
 
-
-
+  //Move Axis
+  // Indicates whether the telescope can move the requested axis.
+  server.on("/api/v1/telescope/0/canmoveaxis", HTTP_GET, constant(false));
   // Returns the rates at which the telescope may be moved about the specified
   // axis.
-  server.on("/api/v1/telescope/0/axisrates", HTTP_GET, unimplemented);
-
-  // Indicates whether the telescope can move the requested axis.
-  server.on("/api/v1/telescope/0/canmoveaxis", HTTP_GET, unimplemented);
-
-
-
+  server.on("/api/v1/telescope/0/axisrates", HTTP_GET, producer([](){
+    StaticJsonDocument<JSON_ARRAY_SIZE(1)> doc;
+    JsonArray array = doc.to<JsonArray>();
+    return array;
+  }));
   // Moves a telescope axis at the given rate.
   server.on("/api/v1/telescope/0/moveaxis", HTTP_PUT, unimplemented);
 
@@ -473,6 +534,8 @@ std::function<void(AsyncWebServerRequest *request)> constant(V s) {
 template <class F>
 std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f) {
   return [f](AsyncWebServerRequest *request) {
+    Serial.print(request->methodToString());
+    Serial.print(" ");
     Serial.println(request->url());
     AsyncResponseStream *response =
         request->beginResponseStream("application/json");
@@ -481,9 +544,9 @@ std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f) {
       f(request, doc);
       doc["ErrorNumber"] = 0;
       doc["ErrorMessage"] = "";
-    } catch ( std::invalid_argument e ){
-      doc["ErrorNumber"] = 1025;
-      doc["ErrorMessage"] = "Invalid Argument";
+    } catch ( Error e ){
+      doc["ErrorNumber"] = e.getCode();
+      doc["ErrorMessage"] = e.getMessage();
     }
 
     AsyncWebParameter *cID =
@@ -498,6 +561,8 @@ std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f) {
 std::function<void(AsyncWebServerRequest *request)> error(int error,
                                                           String message) {
   return [error, message](AsyncWebServerRequest *request) {
+    Serial.print(request->methodToString());
+    Serial.print(" ");
     Serial.println(request->url());
     AsyncResponseStream *response =
         request->beginResponseStream("application/json");

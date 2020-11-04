@@ -1,4 +1,5 @@
 #include "Phy.h"
+#include "Error.h"
 
 #define AZ_STEPS 200
 #define AZ_MICRO_STEPS 8
@@ -46,30 +47,36 @@ Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0) {
 }
 
 float Phy::getAlt() {
-  float ret = alt_cur * 360.0 / (float)ALT_STEPS_PER_REV;
-  if (ret > 90) ret = 180 - ret;
+  float ret = (alt_cur - (az_cur * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV) * 360.0 / (float)ALT_STEPS_PER_REV;
+  //TODO Need to un-adjust
   return ret;
 }
 
 float Phy::getAz() {
-  float alt = alt_cur * 360.0 / (float)ALT_STEPS_PER_REV;
-  float ret = az_cur * 360.0 / (float)AZ_STEPS_PER_REV;
-  if (alt > 90) ret = ret + 180;
-  return ret;
+  return az_cur * 360.0 / (float)AZ_STEPS_PER_REV;
+}
+
+bool Phy::isMoving(){
+  return moving;
 }
 
 void Phy::setAltAz(float altD, float azD) {
+  if ( altD < 0 || altD > 90 )
+    throw ASCOM_INVALID(Altitude);
+  if ( azD < 0 || azD > 360 )
+    throw ASCOM_INVALID(Azimuth);
+
   Serial.print("Setting Target Alt: ");
   Serial.print(altD);
   Serial.print(", Az: ");
   Serial.print(azD);
   Serial.println();
 
-  if (azD > 180) {
+  /*if (azD > 180) {
     Serial.println("flip");
     azD = azD - 180;
     altD = 90 + 90 - altD;
-  }
+  }*/
   az_target = AZ_STEPS_PER_REV * (azD / 360.0);
   int azDiff = az_target - az_cur;
 

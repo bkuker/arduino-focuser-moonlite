@@ -24,6 +24,7 @@ public:
 	float getAlt();
 	float getAz();
 	void tick();
+	bool isMoving();
 
 	void azCalCircle();
 	void altCalCircle();
