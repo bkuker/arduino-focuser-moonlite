@@ -16,17 +16,21 @@
 #include "AstroClock.h"
 #include "Error.h"
 
-void dms(float a) {
-	int d = floor(a);
-	int m = floor((a - d) * 60);
-	int s = floor((((a - d) * 60) - m) * 60);
-	Serial.print(d);
-	Serial.print("°");
-	Serial.print(m);
-	Serial.print("'");
-	Serial.print(s);
-	Serial.print("\"");
-}
+//Alpaca State
+////General
+int serverTransactionID = 0;
+boolean connected = false;
+////Parking
+boolean parked = false;
+int parkAlt = 0;
+int parkAz = 0;
+////Target
+double targetRA = -1;
+double targetDec = -1;
+double nextTargetRA = -1;
+double nextTargetDec = -1;
+////Tracking
+boolean isTracking = true;
 
 std::string getCurrentTimeFormatted();
 void setupWifi();
@@ -46,6 +50,13 @@ void setup() {
 void loop() {
   phy.tick();
   delay(3);
+
+  if ( !phy.isMoving() && isTracking && targetRA != -1 && targetDec != -1){
+    float alt, az;
+    as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
+    phy.setAltAz(alt, az);
+    delay(500);
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -74,23 +85,6 @@ void setupWifi() {
 ///////////////////////////////////////////////////////////////////////////////
 AsyncWebServer server(80);
 
-//Alpaca State
-int serverTransactionID = 0;
-boolean connected = false;
-
-//Parking
-boolean parked = false;
-int parkAlt = 0;
-int parkAz = 0;
-
-//Target
-double targetRA = 0;
-double targetDec = 0;
-double nextTargetRA = -1;
-double nextTargetDec = -1;
-
-//Tracking
-boolean isTracking = true;
 
 template <class F>
 std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f);
@@ -349,8 +343,8 @@ void setupServer() {
 
     targetRA = nextTargetRA = ra;
     targetDec = nextTargetDec = dec;
+    
     float alt, az;
-
     as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
     phy.setAltAz(alt, az);
   }));
@@ -395,6 +389,7 @@ void setupServer() {
       throw ASCOM_INVALID_WHILE_PARKED(SlewToCoordinatesAsync);
     targetRA = nextTargetRA;
     targetDec = nextTargetDec;
+
     float alt, az;
     as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
     phy.setAltAz(alt, az);
