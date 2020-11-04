@@ -38,7 +38,7 @@
 
 #define ZERO(PIN) !digitalRead(PIN##_ZERO)
 
-Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0) {
+Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0), azF(0), altF(0) {
   pinMode(AZ_STEP, OUTPUT);
   pinMode(AZ_DIR, OUTPUT);
   pinMode(ALT_STEP, OUTPUT);
@@ -61,6 +61,12 @@ bool Phy::isMoving(){
 }
 
 void Phy::setAltAz(float altD, float azD) {
+  Serial.print("setAltAz: ");
+  Serial.print(altD);
+  Serial.print(", Az: ");
+  Serial.print(azD);
+  Serial.println();
+
   if ( altD < 0 || altD > 90 )
     throw ASCOM_INVALID(Altitude);
   if ( azD < 0 || azD > 360 )
@@ -72,129 +78,44 @@ void Phy::setAltAz(float altD, float azD) {
   Serial.print(azD);
   Serial.println();
 
-  /*if (azD > 180) {
-    Serial.println("flip");
-    azD = azD - 180;
-    altD = 90 + 90 - altD;
-  }*/
+
   az_target = AZ_STEPS_PER_REV * (azD / 360.0);
-  int azDiff = az_target - az_cur;
-
-  /*
-  Serial.print("Az steps: ");
-  Serial.print(AZ_STEPS_PER_REV);
-  Serial.print(", Alt steps: ");
-  Serial.print(ALT_STEPS_PER_REV);
-  Serial.println();
-  */
-
-  int altExtra = (azDiff * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV;
-
-  /*
-  Serial.print("Az Diff: ");
-  Serial.print(azDiff);
-  Serial.print(", Alt Extra: ");
-  Serial.print(altExtra);
-  Serial.println();
-  */
-
+  int altExtra = (az_target * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV;
   alt_target = altExtra + ALT_STEPS_PER_REV * (altD / 360.0);
+  
 
-  /*
-  Serial.print("Target Alt: ");
-  Serial.print(alt_target);
-  Serial.print(", Az: ");
-  Serial.print(az_target);
-  Serial.println();
-  */
-
-  bresSetup(az_target, alt_target);
   moving = true;
 }
 
 void Phy::tick() {
-  // Execute one step of the line drawing algorithm
-  if (k < tt) {
-    k = k + 1;
-    if (d > 0) {
-      x = x + q;
-      y = y + s;
-      d = d + 2 * (a + b);
-      STEP(AZ, dirx);
-      STEP(ALT, diry);
-    } else {
-      if (ff) {
-        x = x + q;
-        STEP(AZ, dirx);
-      } else {
-        y = y + s;
-        STEP(ALT, diry);
-      }
-      d = d + 2 * a;
-    }
-    /*
-	Serial.print("x,y = ");
-    Serial.print(x);
-    Serial.print(" , ");
-    Serial.print(y);
-    Serial.println();
-	*/
+  int alt_delta = alt_target - alt_cur;
+  int az_delta = az_target - az_cur;
 
-	az_cur = x;
-	alt_cur = y;
-  } else if (moving ) {
-    moving = false;
-	  az_cur = az_target;
-	  alt_cur = alt_target;
-    Serial.println("Arrived at target");
-  }
+  float div = max(abs(alt_delta), abs(az_delta));
+  float alt_step = alt_delta / div;
+  float az_step = az_delta / div;
+
+  moving = false;
+
+	if (alt_cur != alt_target) {
+    moving = true;
+    altF = altF + alt_step;
+    if (round(abs(alt_cur - altF)) > 1){
+      STEP(ALT, alt_step<0);
+      alt_cur += alt_step>0?1:-1;
+    }
+	}
+	if (az_cur != az_target) {
+    moving = true;
+    azF = azF + az_step;
+    if (round(abs(az_cur - azF)) > 1){
+		  STEP(AZ, az_step<0);
+      az_cur += az_step>0?1:-1;
+    }
+	}
+  return;
 }
 
-void Phy::bresSetup(float xf, float yf) {
-  // xf and yf rapresent the final point
-  float DX = (float)xf - (float)az_cur;
-  float DY = (float)yf - (float)alt_cur;
-  x = az_cur;
-  y = alt_cur;
-  boolean ff = true;
-
-  if (abs(DX) < abs(DY)) {
-    float C = DX;
-    DX = DY;
-    DY = C;
-    ff = false;
-  }  // case when DX>DY!!
-  a = abs(DY);
-  b = -abs(DX);
-  // calculation of d0
-  d = (float)2 * a + b;
-  // s  and q are the increments of x and y respectively
-  q = 1;
-  s = 1;
-  dirx = 0;
-  diry = 0;
-  if (ff) {
-    if (DX < 0) {
-      q = -1;
-      dirx = 1;
-    }
-    if (DY < 0) {
-      s = -1;
-      diry = 1;
-    }
-  } else {
-    if (DX < 0) {
-      q = -1;
-      diry = 1;
-    }
-    if (DY < 0) {
-      s = -1;
-      dirx = 1;
-    }
-  }
-  k = 0;
-  tt = round(-b);
-}
 
 void Phy::azCalCircle() {
   delay(3000);

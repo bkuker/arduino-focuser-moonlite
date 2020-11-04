@@ -13,11 +13,7 @@ private:
 
 	void bresSetup(float xf, float yf);
 
-	//bresenham line drawing state
-	long k, tt;
-	float x, y, d, a, b;
-	int dirx, diry, q, s;
-	bool ff;
+	float azF, altF;
 public:
 	Phy();
 	void setAltAz(float altD, float azD);
