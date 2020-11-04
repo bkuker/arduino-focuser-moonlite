@@ -82,6 +82,9 @@ boolean parked = false;
 int parkAlt = 0;
 int parkAz = 0;
 
+//Tracking
+boolean isTracking = true;
+
 template <class F>
 std::function<void(AsyncWebServerRequest *request)> alpacaResponse(F f);
 template <class F>
@@ -131,10 +134,8 @@ void setupServer() {
   server.on("/api/v1/telescope/0/connected", HTTP_GET, producer([]() { return connected; }));
   // Sets the connected state of the device
   server.on("/api/v1/telescope/0/connected", HTTP_PUT, function([](AsyncWebServerRequest *request) {
-              return connected = request->getParam("Connected", true)->value().equalsIgnoreCase("true");
-              Serial.print("Set connected ");
-              Serial.println(connected);
-            }));
+    return connected = request->getParam("Connected", true)->value().equalsIgnoreCase("true");
+  }));
 
   //Actions
   // Returns the list of action names supported by this driver.
@@ -216,18 +217,23 @@ void setupServer() {
   server.on("/api/v1/telescope/0/rightascensionrate", HTTP_GET, constant(0));
   // Sets the telescope's right ascension tracking rate.
   server.on("/api/v1/telescope/0/rightascensionrate", HTTP_PUT, unimplemented);
+
   // Indicates whether the Tracking property can be changed.
-  server.on("/api/v1/telescope/0/cansettracking", HTTP_GET, constant(false));
+  server.on("/api/v1/telescope/0/cansettracking", HTTP_GET, constant(true));
   // Indicates whether the telescope is tracking.
-  server.on("/api/v1/telescope/0/tracking", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/tracking", HTTP_GET,  producer([]() { return isTracking; }));
   // Enables or disables telescope tracking.
-  server.on("/api/v1/telescope/0/tracking", HTTP_PUT, unimplemented);
+  server.on("/api/v1/telescope/0/tracking", HTTP_PUT, function([](AsyncWebServerRequest *request) {
+    return isTracking = request->getParam("Tracking", true)->value().equalsIgnoreCase("true");
+  }));
+  
   // Returns the current tracking rate.
-  server.on("/api/v1/telescope/0/trackingrate", HTTP_GET, unimplemented);
+  server.on("/api/v1/telescope/0/trackingrate", HTTP_GET, constant(0));
   // Sets the mount's tracking rate.
   server.on("/api/v1/telescope/0/trackingrate", HTTP_PUT, unimplemented);
   // Returns a collection of supported DriveRates values.
   server.on("/api/v1/telescope/0/trackingrates", HTTP_GET, unimplemented);
+
 
 
   //Guiding
@@ -392,7 +398,7 @@ void setupServer() {
   //Time
   // Returns the local apparent sidereal time.
   server.on("/api/v1/telescope/0/siderealtime", HTTP_GET, producer([](){
-    return as.localSiderealTime(time(NULL));
+    return (as.localSiderealTime(time(NULL))/360.0f)*24.0f;
   }));
   // Returns the UTC date/time of the telescope's internal clock.
   server.on("/api/v1/telescope/0/utcdate", HTTP_GET, producer(getCurrentTimeFormatted));
