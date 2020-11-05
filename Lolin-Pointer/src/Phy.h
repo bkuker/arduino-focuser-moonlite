@@ -11,14 +11,14 @@ private:
 
 	bool moving;
 
-	void bresSetup(float xf, float yf);
+	void bresSetup(double xf, double yf);
 
-	float azF, altF;
+	double azF, altF;
 public:
 	Phy();
-	void setAltAz(float altD, float azD);
-	float getAlt();
-	float getAz();
+	void setAltAz(double altD, double azD);
+	double getAlt();
+	double getAz();
 	void tick();
 	bool isMoving();
 

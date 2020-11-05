@@ -46,21 +46,21 @@ Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0), azF(0), altF(0)
   setAltAz(0,0); //initialize all bresenham variables
 }
 
-float Phy::getAlt() {
-  float ret = (alt_cur - (az_cur * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV) * 360.0 / (float)ALT_STEPS_PER_REV;
+double Phy::getAlt() {
+  double ret = (alt_cur - (az_cur * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV) * 360.0 / (double)ALT_STEPS_PER_REV;
   //TODO Need to un-adjust
   return ret;
 }
 
-float Phy::getAz() {
-  return az_cur * 360.0 / (float)AZ_STEPS_PER_REV;
+double Phy::getAz() {
+  return az_cur * 360.0 / (double)AZ_STEPS_PER_REV;
 }
 
 bool Phy::isMoving(){
   return moving;
 }
 
-void Phy::setAltAz(float altD, float azD) {
+void Phy::setAltAz(double altD, double azD) {
   Serial.print("setAltAz: ");
   Serial.print(altD);
   Serial.print(", Az: ");
@@ -91,9 +91,9 @@ void Phy::tick() {
   int alt_delta = alt_target - alt_cur;
   int az_delta = az_target - az_cur;
 
-  float div = max(abs(alt_delta), abs(az_delta));
-  float alt_step = alt_delta / div;
-  float az_step = az_delta / div;
+  double div = max(abs(alt_delta), abs(az_delta));
+  double alt_step = alt_delta / div;
+  double az_step = az_delta / div;
 
   moving = false;
 

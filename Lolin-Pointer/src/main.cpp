@@ -52,10 +52,10 @@ void loop() {
   delay(1);
 
   if ( !phy.isMoving() && isTracking && targetRA != -1 && targetDec != -1){
-    float alt, az;
+    double alt, az;
     as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
     phy.setAltAz(alt, az);
-    delay(500);
+    delay(1000);
   }
 }
 
@@ -344,7 +344,7 @@ void setupServer() {
     targetRA = nextTargetRA = ra;
     targetDec = nextTargetDec = dec;
     
-    float alt, az;
+    double alt, az;
     as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
     phy.setAltAz(alt, az);
   }));
@@ -390,7 +390,7 @@ void setupServer() {
     targetRA = nextTargetRA;
     targetDec = nextTargetDec;
 
-    float alt, az;
+    double alt, az;
     as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
     phy.setAltAz(alt, az);
   }));
@@ -445,13 +445,13 @@ void setupServer() {
   //Current Position
   // Returns the mount's declination.
   server.on("/api/v1/telescope/0/declination", HTTP_GET, producer([](){
-    float ra, dec;
+    double ra, dec;
     as.unconvert(time(NULL), phy.getAlt(), phy.getAz(), &ra, &dec);
     return dec;
   }));
   // Returns the mount's right ascension coordinate.
   server.on("/api/v1/telescope/0/rightascension", HTTP_GET, producer([](){
-    float ra, dec;
+    double ra, dec;
     as.unconvert(time(NULL), phy.getAlt(), phy.getAz(), &ra, &dec);
     return (ra/360.0f)*24.0f;
   }));

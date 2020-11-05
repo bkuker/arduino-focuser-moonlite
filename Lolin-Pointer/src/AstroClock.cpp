@@ -19,23 +19,23 @@
 #define ASIN(X) DEG(asin(X))
 #define ACOS(X) DEG(acos(X))
 
-AstroClock::AstroClock(float _lat, float _lon) :
+AstroClock::AstroClock(double _lat, double _lon) :
 		lat(_lat), lon(_lon) {
 }
 
-float AstroClock::getLat(){
+double AstroClock::getLat(){
 	return lat;
 }
 
-void AstroClock::setLat(float _lat){
+void AstroClock::setLat(double _lat){
 	lat = _lat;
 }
 
-float AstroClock::getLon(){
+double AstroClock::getLon(){
 	return lon;
 }
 
-void AstroClock::setLon(float _lon){
+void AstroClock::setLon(double _lon){
 	lon = _lon;
 }
 
@@ -44,34 +44,34 @@ AstroClock::~AstroClock() {
 	// TODO Auto-generated destructor stub
 }
 
-float AstroClock::convertJ2000(uint32_t timestamp) {
+double AstroClock::convertJ2000(uint32_t timestamp) {
 	uint32_t seconds = timestamp - J2K;
 	return seconds / (60.0 * 60.0 * 24.0);
 }
 
-float AstroClock::getLSTd(float j2k) {
-	float ut = 12 + 24 * (j2k - floor(j2k));
-	float lstd = 100.46 + 0.985647 * j2k + lon + 15 * ut;
+double AstroClock::getLSTd(double j2k) {
+	double ut = 12 + 24 * (j2k - floor(j2k));
+	double lstd = 100.46 + 0.985647 * j2k + lon + 15 * ut;
 	while (lstd - 360.0 > 0)
 		lstd = lstd - 360.0;
 	return lstd;
 }
 
-void AstroClock::convert(uint32_t timestamp, float ra, float dec, float* alt,
-		float* az) {
-	float lstd = getLSTd(convertJ2000(timestamp));
-	float ha = lstd - ra;
+void AstroClock::convert(uint32_t timestamp, double ra, double dec, double* alt,
+		double* az) {
+	double lstd = getLSTd(convertJ2000(timestamp));
+	double ha = lstd - ra;
 	while (ha < 0)
 		ha += 360.0;
 
-	float sinAlt = SIN(dec) * SIN(lat) + COS(dec) * COS(lat) * COS(ha);
+	double sinAlt = SIN(dec) * SIN(lat) + COS(dec) * COS(lat) * COS(ha);
 	*alt = ASIN(sinAlt);
 
-	float cosA = //
+	double cosA = //
 			(SIN(dec) - SIN(*alt) * SIN(lat)) //
 			/ (COS(*alt) * COS(lat));
 
-	float a = ACOS(cosA);
+	double a = ACOS(cosA);
 
 	if (SIN(ha) < 0)
 		*az = a;
@@ -79,22 +79,22 @@ void AstroClock::convert(uint32_t timestamp, float ra, float dec, float* alt,
 		*az = 360.0 - a;
 }
 
-float AstroClock::localSiderealTime(uint32_t timestamp){
+double AstroClock::localSiderealTime(uint32_t timestamp){
 	return getLSTd(convertJ2000(timestamp));
 }
 
-void AstroClock::unconvert(uint32_t timestamp, float alt, float az,
-		float* raOut, float* decOut) {
+void AstroClock::unconvert(uint32_t timestamp, double alt, double az,
+		double* raOut, double* decOut) {
 
-	float d2r = PI / 180.0f;
+	double d2r = PI / 180.0f;
 
-	float alt_r = alt * d2r;
-	float az_r = az * d2r;
-	float lat_r = lat * d2r;
+	double alt_r = alt * d2r;
+	double az_r = az * d2r;
+	double lat_r = lat * d2r;
 
 	//******************************************************************************
 	//find local HOUR ANGLE (in degrees, from 0. to 360.)
-	float ha = atan2(-sin(az_r) * cos(alt_r),
+	double ha = atan2(-sin(az_r) * cos(alt_r),
 			-cos(az_r) * sin(lat_r) * cos(alt_r) + sin(alt_r) * cos(lat_r));
 	ha = ha / d2r;
 
@@ -108,13 +108,13 @@ void AstroClock::unconvert(uint32_t timestamp, float alt, float az,
 		ha = ha - 360;
 
 	//Find declination (positive if north of Celestial Equator, negative if south)
-	float sindec = sin(lat_r) * sin(alt_r)
+	double sindec = sin(lat_r) * sin(alt_r)
 			+ cos(lat_r) * cos(alt_r) * cos(az_r);
-	float dec = asin(sindec) / d2r;	 // convert dec to degrees
+	double dec = asin(sindec) / d2r;	 // convert dec to degrees
 	while ( dec < 0 )
 		dec += 360;
 
-	float lstd = getLSTd(convertJ2000(timestamp));
+	double lstd = getLSTd(convertJ2000(timestamp));
 
 	*decOut = dec;
 	*raOut = lstd - ha;
