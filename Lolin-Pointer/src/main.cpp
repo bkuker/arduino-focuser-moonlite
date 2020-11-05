@@ -52,9 +52,14 @@ void loop() {
   delay(1);
 
   if ( !phy.isMoving() && isTracking && targetRA != -1 && targetDec != -1){
-    double alt, az;
-    as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
-    phy.setAltAz(alt, az);
+    try {
+        double alt, az;
+        as.convert(time(NULL), (targetRA/24.f)*360.0f, targetDec, &alt, &az);
+        phy.setAltAz(alt, az);
+    } catch (Error e){
+      Serial.print("Error during tracking: ");
+      Serial.println(e.getMessage().c_str());
+    }
     delay(1000);
   }
 }
