@@ -49,7 +49,7 @@ void setup() {
 
 void loop() {
   phy.tick();
-  delay(3);
+  delay(1);
 
   if ( !phy.isMoving() && isTracking && targetRA != -1 && targetDec != -1){
     float alt, az;

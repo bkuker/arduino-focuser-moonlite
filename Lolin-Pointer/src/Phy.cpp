@@ -2,14 +2,14 @@
 #include "Error.h"
 
 #define AZ_STEPS 200
-#define AZ_MICRO_STEPS 8
+#define AZ_MICRO_STEPS 16
 #define AZ_RING_TEETH 60
 #define AZ_DRIVE_TEETH 15
 #define AZ_STEPS_PER_REV \
   ((AZ_RING_TEETH * AZ_STEPS * AZ_MICRO_STEPS) / AZ_DRIVE_TEETH)
 
 #define ALT_STEPS 200
-#define ALT_MICRO_STEPS 8
+#define ALT_MICRO_STEPS 16
 #define ALT_GEAR_TEETH 35
 #define ALT_DRIVE_TEETH 15
 #define ALT_STEPS_PER_REV \
