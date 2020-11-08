@@ -1,5 +1,4 @@
-#ifndef ERROR_H_
-#define ERROR_H_
+#pragma once
 #include <string>
 #include <stdexcept>
 
@@ -21,5 +20,3 @@ public:
     int getCode();
     std::string getMessage();
 };
-
-#endif

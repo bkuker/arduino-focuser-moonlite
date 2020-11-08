@@ -1,5 +1,4 @@
-#ifndef PHY_H_
-#define PHY_H_
+#pragma once
 #include "Arduino.h"
 
 class Phy {
@@ -25,5 +24,3 @@ public:
 	void azCalCircle();
 	void altCalCircle();
 };
-
-#endif

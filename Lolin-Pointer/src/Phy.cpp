@@ -27,8 +27,6 @@
 #define ALT_STEP 23
 #define ALT_DIR 18
 
-#define STEP_DELAY 500
-
 #define STEP(PIN, DIR)              \
   {                                 \
     digitalWrite(PIN##_DIR, DIR);   \
@@ -48,7 +46,6 @@ Phy::Phy() : alt_cur(0), az_cur(0), alt_target(0), az_target(0), azF(0), altF(0)
 
 double Phy::getAlt() {
   double ret = (alt_cur - (az_cur * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV) * 360.0 / (double)ALT_STEPS_PER_REV;
-  //TODO Need to un-adjust
   return ret;
 }
 
