@@ -50,7 +50,7 @@ double Phy::getAlt() {
 }
 
 double Phy::getAz() {
-  return az_cur * 360.0 / (double)AZ_STEPS_PER_REV;
+  return (az_cur%AZ_STEPS_PER_REV) * 360.0 / (double)AZ_STEPS_PER_REV;
 }
 
 bool Phy::isMoving(){
@@ -77,6 +77,19 @@ void Phy::setAltAz(double altD, double azD) {
 
 
   az_target = AZ_STEPS_PER_REV * (azD / 360.0);
+
+  //More than 180 degrees+, spin the other way
+  if ( (az_target - az_cur ) > AZ_STEPS_PER_REV / 2){
+    Serial.println("Taking short path -");
+    az_target -= AZ_STEPS_PER_REV;
+  }
+  //More than 180 degrees-, spin the other way
+  if ( (az_cur - az_cur) > AZ_STEPS_PER_REV / 2){
+    Serial.println("Taking short path +");
+    az_target += AZ_STEPS_PER_REV;
+  }
+
+
   int altExtra = (az_target * ALT_STEPS * ALT_MICRO_STEPS) / AZ_STEPS_PER_REV;
   alt_target = altExtra + ALT_STEPS_PER_REV * (altD / 360.0);
   
